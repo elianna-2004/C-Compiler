@@ -1,0 +1,291 @@
+(* Parses the Tokens generated from the Lexer to produce an AST (Command Tree) for the Evaluator to process *)
+
+open SmallCTypes
+open Utils
+open TokenTypes
+
+(* Parsing helpers (you don't need to modify these) *)
+
+(* Return types for parse_stmt and parse_expr *)
+type stmt_result = token list * stmt
+type expr_result = token list * expr
+
+(* Return the next token in the token list, throwing an error if the list is empty *)
+let lookahead (toks : token list) : token =
+  match toks with
+  | [] -> raise (InvalidInputException "No more tokens")
+  | h::_ -> h
+
+(* Matches the next token in the list, throwing an error if it doesn't match the given token *)
+let match_token (toks : token list) (tok : token) : token list =
+  match toks with
+  | [] -> raise (InvalidInputException(string_of_token tok))
+  | h::t when h = tok -> t
+  | h::_ -> raise (InvalidInputException(
+      Printf.sprintf "Expected %s from input %s, got %s"
+        (string_of_token tok)
+        (string_of_list string_of_token toks)
+        (string_of_token h)
+    ))
+
+(* Parsing (TODO: implement your code below) *)
+
+let rec parse_expr toks : expr_result =
+  (* To start our grammar, S -> O *)
+  (* parse Or *)
+  let (tokens, e1) = (parse_and toks) in (* Calculate A *)
+  match (lookahead tokens) with
+  (* O -> A Tok_Or O *)
+  |Tok_Or -> let t = (match_token tokens Tok_Or) in
+              let (t2, e2) = (parse_expr t) in
+                (t2, Or (e1, e2))
+  (* O -> A *)
+  |_ -> (tokens, e1)
+
+  (* parse And *)
+  and parse_and toks = 
+    let (tokens, e1) = (parse_equality toks) in (* Calculate E *)
+    match (lookahead tokens) with 
+    (* A -> E Tok_And A *)
+    |Tok_And -> let t = (match_token tokens Tok_And) in
+                  let (t2, e2) = (parse_and t) in
+                    (t2, And (e1, e2))
+    (* A -> E *)
+    |_ -> (tokens, e1)
+
+  (* parse Equality *)
+  and parse_equality toks =
+    let (tokens, e1) = (parse_relation toks) in (* Calculate R *)
+    match (lookahead tokens) with
+    (* E -> R Tok_Equal E *)
+    |Tok_Equal -> let t = (match_token tokens Tok_Equal) in
+                    let (t2, e2) = (parse_equality t) in
+                      (t2, Equal (e1, e2))
+    (* E -> R Tok_NotEqual E *)
+    |Tok_NotEqual -> let t = (match_token tokens Tok_NotEqual) in 
+                      let (t2, e2) = (parse_equality t) in
+                        (t2, NotEqual (e1, e2))
+    (* E -> R *)
+    |_ -> (tokens, e1)
+
+  (* parse Relational *)
+  and parse_relation toks = 
+    let (tokens, e1) = (parse_add toks) in (* Calculate Add *)
+    match (lookahead tokens) with
+    (* R -> Add Tok_Greater R *)
+    |Tok_Greater -> let t = (match_token tokens Tok_Greater) in
+                      let (t2, e2) = (parse_relation t) in
+                        (t2, Greater (e1, e2))
+    (* R -> Add Tok_GreaterEqual R *)
+    |Tok_GreaterEqual -> let t = (match_token tokens Tok_GreaterEqual) in
+                          let (t2, e2) = (parse_relation t) in
+                            (t2, GreaterEqual (e1, e2))
+    (* R -> Add Tok_Less R *)
+    |Tok_Less -> let t = (match_token tokens Tok_Less) in
+                  let (t2, e2) = (parse_relation t) in
+                    (t2, Less (e1, e2))
+    (* R -> Add Tok_LessEqual R *)
+    |Tok_LessEqual -> let t = (match_token tokens Tok_LessEqual) in
+                        let (t2, e2) = (parse_relation t) in
+                          (t2, LessEqual (e1, e2))
+    (* R -> Add *)
+    |_ -> (tokens, e1)
+
+  (* parse Additive *)
+  and parse_add toks = 
+    let (tokens, e1) = (parse_mult toks) in (* Calculate M *)
+    match (lookahead tokens) with
+    (* Add -> M Tok_Add Add *)
+    |Tok_Add -> let t = (match_token tokens Tok_Add) in
+                  let (t2, e2) = (parse_add t) in
+                    (t2, Add (e1, e2))
+    (* Add -> M Tok_Sub Add *)
+    |Tok_Sub -> let t = (match_token tokens Tok_Sub) in 
+                  let (t2, e2) = (parse_add t) in
+                    (t2, Sub (e1, e2))
+    (*Add -> M *)
+    |_ -> (tokens, e1)
+
+  (* parse Multiplicative *)
+  and parse_mult toks = 
+    let (tokens, e1) = (parse_pow toks) in (* Calculate P *)
+    match (lookahead tokens) with
+    (* M -> P Tok_Mult M *)
+    |Tok_Mult -> let t = (match_token tokens Tok_Mult) in
+                  let (t2, e2) = (parse_mult t) in
+                    (t2, Mult (e1, e2))
+    (* M -> P Tok_Div M *)
+    |Tok_Div -> let t = (match_token tokens Tok_Div) in
+                  let (t2, e2) = (parse_mult t) in
+                    (t2, Div (e1, e2))
+    (* M -> P*)
+    |_ -> (tokens, e1)
+
+  (* parse Power *)
+  and parse_pow toks =
+    let (tokens, e1) = (parse_un toks) in (* Calculate U *)
+    match (lookahead tokens) with
+    (*P -> U Tok_Pow P*)
+    |Tok_Pow -> let t = (match_token tokens Tok_Pow) in
+                  let (t2, e2) = (parse_pow t) in
+                    (t2, Pow (e1, e2))
+    (* P -> U *)
+    |_ -> (tokens, e1)
+
+  (* parse Unary *)
+  and parse_un toks =
+    match (lookahead toks) with
+    (* U -> Tok_not U *)
+    |Tok_Not -> let t = (match_token toks Tok_Not) in
+                  let (t2, e2) = (parse_un t) in 
+                    (t2, Not (e2))
+    (* U -> Prim *)
+    |_ -> let (tokens, e1) = (parse_prim toks) in (tokens, e1)
+
+  (* parse Primary*)
+  and parse_prim toks =
+    match (lookahead toks) with
+    (* Prim -> Tok_Int *)
+    |Tok_Int (x) -> let t = (match_token toks (Tok_Int (x))) in
+                      (t, Int (x)) (* t is remaining token list with Tok_int taken out *)
+    |Tok_Bool (y) -> let t = (match_token toks (Tok_Bool (y))) in
+                      (t, Bool (y))
+    (* Prim -> Tok_Id *)
+    |Tok_ID (str) -> let t = (match_token toks (Tok_ID (str))) in
+                      (t, ID (str))
+    (* Prim -> Tok_LParen E Tok_RParen*)
+    |Tok_LParen -> let t = (match_token toks Tok_LParen) in
+                    let (t2, e2) = (parse_expr t) in (*tokList, AST *)
+                      if (lookahead t2) = Tok_RParen then
+                        ((match_token t2 Tok_RParen), e2)
+                      else raise (InvalidInputException "Unbalanced Parenthesis")
+    |_ -> raise (InvalidInputException  "Invalid Base Case")
+  
+
+let rec parse_stmt toks : stmt_result =
+  let (tokens, stmt) = (parse_ops toks) in
+    match (lookahead tokens) with
+    |EOF -> ([EOF], Seq (stmt, NoOp))
+    |Tok_RBrace -> (tokens, Seq (stmt, NoOp))
+    |_ -> let (t2, stmt2) = (parse_stmt tokens) in
+            (t2, Seq (stmt, stmt2))
+    (*raise (InvalidInputException (string_of_list string_of_token tokens))  *)
+
+  (* Parse StmtOptions *)
+  and parse_ops toks =
+    match (lookahead toks) with 
+    (* StmtOptions -> DeclareStmt -> Int*)
+    |Tok_Int_Type -> let t = (match_token toks Tok_Int_Type) in
+                          (match (lookahead t) with
+                          |Tok_ID(str) -> let t2 = (match_token t (Tok_ID (str))) in
+                                            let t3 = (match_token t2 Tok_Semi) in
+                                              (t3, Declare (Int_Type, str))
+                          |_ -> raise (InvalidInputException "Unexpected Token 1"))
+    (* StmtOptions -> DeclareStmt -> Bool *)
+    |Tok_Bool_Type -> let t = (match_token toks Tok_Bool_Type) in
+                          (match (lookahead t) with
+                          |Tok_ID (str) -> let t2 = (match_token t (Tok_ID (str))) in
+                                            let t3 = (match_token t2 Tok_Semi) in
+                                              (t3, Declare (Bool_Type, str))
+                          |_ -> raise (InvalidInputException "Unexpected Token 2") )
+    (* StmtOptions -> AssignStmt *)          
+    |Tok_ID (str) -> let t = (match_token toks (Tok_ID (str))) in
+                      let t2 = (match_token t Tok_Assign) in
+                        let (t3, expr) = (parse_expr t2) in
+                          let t4 = (match_token t3 Tok_Semi) in
+                            (t4, Assign (str, expr))
+    (* StmtOptions -> PrintStmt *)
+    |Tok_Print -> let t = (match_token toks Tok_Print) in
+                    let t2  = (match_token t Tok_LParen) in
+                      let (t3, expr) = (parse_expr t2) in
+                        let t4 = (match_token t3 Tok_RParen) in
+                          let t5 = (match_token t4 Tok_Semi) in
+                            (t5, Print (expr))
+    (* StmtOptions -> IfStmt *)
+    |Tok_If -> let t = (match_token toks Tok_If) in
+                let new_t = (match_token t Tok_LParen) in
+                  let (t2, expr) = (parse_expr new_t) in
+                    let new_t2 = (match_token t2 Tok_RParen) in
+                        let t3 = (match_token new_t2 Tok_LBrace) in
+                          if (lookahead t3) = Tok_RBrace then
+                            let (t5, stmt) = ((match_token t3 Tok_RBrace), NoOp) in
+                              if (lookahead t5) = Tok_Else then (* Check for Else *)
+                                let t6 = (match_token t5 Tok_Else) in
+                                  let t7 = (match_token t6 Tok_LBrace) in
+                                    if (lookahead t7) = Tok_RBrace then
+                                      let t8 = (match_token t7 Tok_RBrace) in
+                                        (t8, If(expr, NoOp, NoOp))
+                                    else
+                                      let (t8, stmt2) = (parse_stmt t7) in
+                                        let t9 = (match_token t8 Tok_RBrace) in
+                                          (t9, If (expr, stmt, stmt2))
+                              else (t5, If (expr, stmt , NoOp)) (* No Else Branch*)
+                          else 
+                            let (t4, stmt) = (parse_stmt t3) in
+                              let t5 = (match_token t4 Tok_RBrace) in
+                                  if (lookahead t5) = Tok_Else then (* Check for Else *)
+                                    let t6 = (match_token t5 Tok_Else) in
+                                      let t7 = (match_token t6 Tok_LBrace) in
+                                        if (lookahead t7) = Tok_RBrace then
+                                          let t8 = (match_token t7 Tok_RBrace) in
+                                            (t8, If(expr, NoOp, NoOp))
+                                        else
+                                          let (t8, stmt2) = (parse_stmt t7) in
+                                            let t9 = (match_token t8 Tok_RBrace) in
+                                              (t9, If (expr, stmt, stmt2))
+                                  else (t5, If (expr, stmt , NoOp)) (* No Else Branch*)
+    (* StmtOptions -> ForStmt *)
+    |Tok_For -> let t = (match_token toks Tok_For) in
+                  let t2 = (match_token t Tok_LParen) in
+                  (match (lookahead t2) with
+                  |Tok_ID (str) -> let t3 = (match_token t2 (Tok_ID (str))) in
+                                    let t4 = (match_token t3 Tok_From) in
+                                      let (t5, expr) = (parse_expr t4) in (* Get first expr *)
+                                        let t6 = (match_token t5 Tok_To) in
+                                          let (t7, expr2) = (parse_expr t6) in (* Get second expr *)
+                                            let t8 = (match_token t7 Tok_RParen) in
+                                              let t9 = (match_token t8 Tok_LBrace) in
+                                                if (lookahead t9) = Tok_RBrace then
+                                                  let t10 = (match_token t9 Tok_RBrace) in
+                                                    (t10, For (str, expr, expr2, NoOp))
+                                                else
+                                                  let (t10, stmt) = (parse_stmt t9) in (* Get statement *)
+                                                  let t11 = (match_token t10 Tok_RBrace) in
+                                                    (t11, For (str, expr, expr2, stmt))
+                  |_ -> raise (InvalidInputException "Unexpected Token 3"))
+    (* StmtOptions WhileStmt *)
+    |Tok_While -> let t = (match_token toks Tok_While) in
+                   let new_t = (match_token t Tok_LParen) in
+                    let (t2, expr) = (parse_expr new_t) in
+                      let new_t2 = (match_token t2 Tok_RParen) in
+                        let t3 = (match_token new_t2 Tok_LBrace) in                        
+                         if (lookahead t3) = Tok_RBrace then
+                          let t4 = (match_token t3 Tok_RBrace) in
+                            (t4, While (expr, NoOp))
+                         else
+                          let (t4, stmt) = (parse_stmt t3) in
+                            let t5 = (match_token t4 Tok_RBrace) in
+                              (t5, While (expr, stmt))
+    |Tok_RBrace -> let t = (match_token toks Tok_RBrace) in
+                     (t, NoOp)
+    |_ -> raise (InvalidInputException (string_of_list string_of_token toks))
+    (* May have to add match case for right brace*)
+      
+  
+let parse_main toks : stmt =
+  match (lookahead toks) with 
+  |Tok_Int_Type -> let t = (match_token toks Tok_Int_Type) in
+                let t2 = (match_token t Tok_Main) in
+                  let t3 = (match_token t2 Tok_LParen) in
+                    let t4 = (match_token t3 Tok_RParen) in 
+                      let t5 = (match_token t4 Tok_LBrace) in
+                        if (lookahead t5) = Tok_RBrace then
+                          NoOp
+                        else
+                          let (t6, stmt) = (parse_stmt t5) in
+                            let t7 = (match_token t6 Tok_RBrace) in
+                              if (lookahead t7) = EOF then
+                                stmt
+                              else raise (InvalidInputException "Expected EOF")
+
+  |_ -> raise (InvalidInputException "Expected Main")
