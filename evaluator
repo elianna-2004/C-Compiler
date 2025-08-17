@@ -1,4 +1,4 @@
-// Last step of compiler process, evaluates the generated commands from the parser to produce output 
+(* Last step of compiler process, evaluates the generated commands from the parser to produce output *)
 
 open SmallCTypes
 open Utils
