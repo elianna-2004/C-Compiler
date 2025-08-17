@@ -1,0 +1,159 @@
+(* Translate C Syntax into tokens for parser *)
+
+open TokenTypes
+
+
+let tokenize input =
+  (* Define all regex's and store in variables *)
+  let right_paren = Re.Perl.compile (Re.Perl.re "^\\)") in
+  let left_paren  = Re.Perl.compile (Re.Perl.re "^\\(") in
+  let left_brace = Re.Perl.compile (Re.Perl.re "^\\{" ) in
+  let right_brace = Re.Perl.compile (Re.Perl.re "^\\}") in
+  let equal = Re.Perl.compile (Re.Perl.re "^\\=\\=") in
+  let not_equal = Re.Perl.compile (Re.Perl.re "^\\!\\=") in
+  let assign = Re.Perl.compile (Re.Perl.re "^\\=") in
+  let greater = Re.Perl.compile (Re.Perl.re "^\\>") in
+  let less = Re.Perl.compile (Re.Perl.re "^\\<") in
+  let greater_equal = Re.Perl.compile (Re.Perl.re "^\\>\\=") in
+  let less_equal = Re.Perl.compile (Re.Perl.re "^\\<\\=")in
+  let or_bool = Re.Perl.compile (Re.Perl.re "^\\|\\|") in
+  let and_bool = Re.Perl.compile (Re.Perl.re "^\\&\\&") in
+  let negate = Re.Perl.compile (Re.Perl.re "^\\!") in
+  let semi = Re.Perl.compile (Re.Perl.re "^\\;") in
+  let num = Re.Perl.compile (Re.Perl.re "^(-?[0-9]+)") in
+  let id = Re.Perl.compile (Re.Perl.re "^([a-zA-Z][a-zA-Z0-9]*)") in
+  let add = Re.Perl.compile (Re.Perl.re "^\\+") in
+  let sub = Re.Perl.compile (Re.Perl.re "^\\-") in
+  let mult = Re.Perl.compile (Re.Perl.re "^\\*") in
+  let div = Re.Perl.compile (Re.Perl.re "^\\/") in
+  let pow = Re.Perl.compile (Re.Perl.re "^\\^") in 
+  let space = Re.Perl.compile (Re.Perl.re "^(\\s+)") in 
+
+  (* Make recusive function that return a token list *)
+  let rec makeList text =
+    
+    (* Match with each: 
+    (Re.execp regexp string) searches a string for a regex and return T/F
+    (Re.exec regexp string) searches a string for a regexp and return matched groups 
+    (String.sub s pos len) is a string of length len containing the substring of s that starts at pos and has length len
+    (String.length string) return length 
+    (Re.Group.get t pos) return matched groups of t and the specified pos (if multiple) from that *)
+
+    if text = "" then [EOF] else
+
+      (* Whitespace *)
+      if (Re.execp space text) then
+        let matched = (Re.Group.get (Re.exec space text) 1) in
+        (makeList (String.sub text (String.length matched) ((String.length text) - (String.length matched))))
+
+      (* Parenthesis & Brackets *)
+      else if (Re.execp left_paren text) then
+        Tok_LParen :: (makeList (String.sub text 1 ((String.length text) - 1)))
+        
+      else if (Re.execp right_paren text) then
+        Tok_RParen :: (makeList (String.sub text 1 ((String.length text) - 1)))
+
+      else if (Re.execp left_brace text) then
+        Tok_LBrace :: (makeList (String.sub text 1 ((String.length text) - 1)))
+
+      else if (Re.execp right_brace text) then
+        Tok_RBrace :: (makeList (String.sub text 1 ((String.length text) - 1)))
+
+      (* Logical Operators *)
+      else if (Re.execp equal text) then
+        Tok_Equal :: (makeList (String.sub text 2 ((String.length text) - 2)))
+
+      else if (Re.execp not_equal text) then
+        Tok_NotEqual :: (makeList (String.sub text 2 ((String.length text) - 2)))
+
+      else if (Re.execp assign text) then
+        Tok_Assign :: (makeList (String.sub text 1 ((String.length text) - 1)))
+
+      else if (Re.execp greater_equal text) then
+        Tok_GreaterEqual :: (makeList (String.sub text 2 ((String.length text) - 2)))
+
+      else if (Re.execp less_equal text) then
+        Tok_LessEqual :: (makeList (String.sub text 2 ((String.length text) - 2)))
+
+      else if (Re.execp greater text) then
+        Tok_Greater :: (makeList (String.sub text 1 ((String.length text) - 1)))
+
+      else if (Re.execp less text) then
+        Tok_Less :: (makeList (String.sub text 1 ((String.length text) - 1)))
+
+      else if (Re.execp pow text) then
+        Tok_Pow :: (makeList (String.sub text 1 ((String.length text) - 1)))
+
+      (* String ID with Other Various Strings *)
+      else if (Re.execp id text) then
+        let matched = (Re.Group.get (Re.exec id text) 1) in
+          if matched = "true" || matched = "false" then
+            let val1 = if matched = "true" then true else false in
+            Tok_Bool (val1) :: (makeList (String.sub text (String.length matched) ((String.length text) - (String.length matched))))
+
+          else if matched = "int" then
+            Tok_Int_Type :: (makeList (String.sub text (String.length matched) ((String.length text) - (String.length matched))))
+
+          else if matched = "bool" then
+            Tok_Bool_Type :: (makeList (String.sub text (String.length matched) ((String.length text) - (String.length matched))))
+
+          else if matched = "printf" then
+            Tok_Print :: (makeList (String.sub text (String.length matched) ((String.length text) - (String.length matched))))
+
+          else if matched = "main" then
+            Tok_Main :: (makeList (String.sub text (String.length matched) ((String.length text) - (String.length matched))))
+
+          else if matched = "if" then
+            Tok_If :: (makeList (String.sub text (String.length matched) ((String.length text) - (String.length matched))))
+
+          else if matched = "else" then
+            Tok_Else :: (makeList (String.sub text (String.length matched) ((String.length text) - (String.length matched))))
+
+          else if matched = "for" then
+            Tok_For :: (makeList (String.sub text (String.length matched) ((String.length text) - (String.length matched))))
+
+          else if matched = "from" then
+            Tok_From :: (makeList (String.sub text (String.length matched) ((String.length text) - (String.length matched))))
+
+          else if matched = "to" then
+            Tok_To :: (makeList (String.sub text (String.length matched) ((String.length text) - (String.length matched))))
+
+          else if matched = "while" then
+            Tok_While :: (makeList (String.sub text (String.length matched) ((String.length text) - (String.length matched))))
+
+          else (Tok_ID (matched) :: (makeList (String.sub text (String.length matched) ((String.length text) - (String.length matched)))))
+
+      (* Logical Statements *)
+      else if (Re.execp or_bool text) then
+        Tok_Or :: (makeList (String.sub text 2 ((String.length text) - 2)))
+
+      else if (Re.execp and_bool text) then
+        Tok_And :: (makeList (String.sub text 2 ((String.length text) - 2)))
+
+      else if (Re.execp negate text) then
+        Tok_Not :: (makeList (String.sub text 1 ((String.length text) - 1)))
+
+      (* Data Types *)
+      else if (Re.execp num text) then
+        let matched = (Re.Group.get (Re.exec num text) 1) in
+        Tok_Int ((int_of_string matched)) :: (makeList (String.sub text (String.length matched) ((String.length text) - (String.length matched))))
+
+      (* Math Operators *)
+      else if (Re.execp add text) then
+        Tok_Add :: (makeList (String.sub text 1 ((String.length text) - 1)))
+      
+      else if (Re.execp sub text) then 
+        Tok_Sub :: (makeList (String.sub text 1 ((String.length text) - 1)))
+
+      else if (Re.execp mult text) then
+        Tok_Mult :: (makeList (String.sub text 1 ((String.length text) - 1))) 
+
+      else if (Re.execp div text) then
+        Tok_Div :: (makeList (String.sub text 1 ((String.length text) - 1)))
+      
+      (* Semicolon *)
+      else if (Re.execp semi text) then
+        Tok_Semi :: (makeList (String.sub text 1 ((String.length text) - 1)))
+
+      else (makeList (String.sub text 1 ((String.length text) - 1))) (* General iterating statement*)
+  in makeList input
