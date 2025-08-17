@@ -1,0 +1,188 @@
+// Last step of compiler process, evaluates the generated commands from the parser to produce output 
+
+open SmallCTypes
+open Utils
+open TokenTypes
+
+exception TypeError of string
+exception DeclareError of string
+exception DivByZeroError
+
+let rec eval_expr env t =
+  match t with 
+  (* Return Int_Val *)
+  |Int (x) -> Int_Val (x) 
+  (* Return Bool_Val *)
+  |Bool (y) -> Bool_Val (y)
+  (* Return Variable Value *)
+  |ID (str) -> (match (List.assoc_opt str env) with
+                |Some (v) -> v
+                |None -> raise (DeclareError "ID not Found")
+               )
+  (* Evaluate Addition *)
+  |Add (expr1, expr2) -> let v1 = (eval_expr env expr1) in
+                         let v2 = (eval_expr env expr2) in
+                         (match (v1, v2) with
+                          |(Int_Val (x), Int_Val (y)) -> Int_Val ((x + y))
+                          |(_, _) -> raise (TypeError "Expected Integers")
+                         )
+  (* Evaluate Subtraction *)
+  |Sub (expr1, expr2) -> let v1 = (eval_expr env expr1) in
+                         let v2 = (eval_expr env expr2) in
+                         (match (v1, v2) with
+                         |(Int_Val(x), Int_Val (y)) -> Int_Val((x - y))
+                         |(_, _) -> raise (TypeError "Expected Integers")
+                         )
+  (* Evaluate Multiplication *)
+  |Mult (expr1, expr2) -> let v1 = (eval_expr env expr1) in
+                          let v2 = (eval_expr env expr2) in
+                          (match (v1, v2) with
+                            |(Int_Val (x), Int_Val (y)) -> Int_Val ((x * y))
+                            |(_, _) -> raise (TypeError "Expected Integers")
+                          )
+  (* Evaluate Division *)
+  |Div (expr1, expr2) -> let v1 = (eval_expr env expr1) in
+                         let v2 = (eval_expr env expr2) in
+                         (match (v1, v2) with
+                          |(_, Int_Val (0)) -> raise (DivByZeroError)
+                          |(Int_Val (x), Int_Val (y)) -> Int_Val((x / y))
+                          |(_, _) -> raise (TypeError "Expected Integers")
+                         )
+  (* Evaluate Exponentiation *)
+  |Pow (expr1, expr2) -> let v1 = (eval_expr env expr1) in 
+                         let v2 = (eval_expr env expr2) in
+                          (match (v1, v2) with
+                            |(Int_Val (x), Int_Val (y)) -> let val3 = (int_of_float((float_of_int x) ** (float_of_int y))) in Int_Val(val3)
+                            |(_, _) -> raise (TypeError "Expected Integers")
+                          )
+  (* Evaluate Or *)
+  |Or (expr1, expr2) -> let v1 = (eval_expr env expr1) in
+                        let v2 = (eval_expr env expr2) in
+                        (match (v1, v2) with
+                          |(Bool_Val (x), Bool_Val(y)) -> Bool_Val((x || y))
+                          |(_, _) -> raise (TypeError "Expected Booleans")
+                        )
+  (* Evaluate And *)
+  |And (expr1, expr2) -> let v1 = (eval_expr env expr1) in
+                         let v2 = (eval_expr env expr2) in
+                         (match (v1, v2) with
+                          |(Bool_Val(x), Bool_Val(y)) -> Bool_Val((x && y))
+                          |(_, _) -> raise (TypeError "Expected Booleans")
+                         )
+  (* Evaluate Not *)
+  |Not (expr1) -> let v1 = (eval_expr env expr1) in
+                  (match v1 with
+                    |Bool_Val (x) -> Bool_Val (not x)
+                    |_ -> raise (TypeError "Expected Boolean")
+                  )
+  (* Evaluate Greater *)
+  |Greater (expr1, expr2) -> let v1 = (eval_expr env expr1) in
+                             let v2 = (eval_expr env expr2) in
+                             (match (v1, v2) with
+                              |(Int_Val(x), Int_Val(y)) -> Bool_Val ((x > y))
+                              |(_, _) -> raise (TypeError "Expected Integers")
+                             )
+  (* Evaluate Less *)
+  |Less (expr1, expr2) -> let v1 = (eval_expr env expr1) in
+                          let v2 = (eval_expr env expr2) in
+                          (match (v1, v2) with
+                            |(Int_Val (x), Int_Val(y)) -> Bool_Val ((x < y))
+                            |(_, _) -> raise (TypeError "Expected Integers")
+                          )
+  (* Evaluate GreaterEqual *)
+  |GreaterEqual (expr1, expr2) -> let v1 = (eval_expr env expr1) in
+                                  let v2 = (eval_expr env expr2) in
+                                  (match (v1, v2) with
+                                    |(Int_Val(x), Int_Val(y)) -> Bool_Val((x >= y))
+                                    |(_, _) -> raise (TypeError "Expected Integers")
+                                  )
+  (* Evaluate LessEqual *)
+  |LessEqual (expr1, expr2) -> let v1 = (eval_expr env expr1) in
+                               let v2 = (eval_expr env expr2) in
+                               (match (v1, v2) with
+                                |(Int_Val(x), Int_Val(y)) -> Bool_Val ((x <= y))
+                                |(_, _) -> raise (TypeError "Expected Integers")
+                               )
+  (* Evaluate Equal *)
+  |Equal (expr1, expr2) -> let v1 = (eval_expr env expr1) in
+                           let v2 = (eval_expr env expr2) in
+                           (match (v1, v2) with
+                            |(Int_Val(x), Int_Val(y)) -> Bool_Val ((x = y))
+                            |(Bool_Val(x), Bool_Val(y)) -> Bool_Val ((x = y))
+                            |(_, _) -> raise (TypeError "Expected Same Types")
+                           )
+  (* Evaluate Not Equal *)
+  |NotEqual (expr1, expr2) -> let v1 = (eval_expr env expr1) in
+                              let v2 = (eval_expr env expr2) in
+                              (match (v1, v2) with
+                               |(Int_Val(x), Int_Val(y)) -> Bool_Val ((x != y))
+                               |(Bool_Val(x), Bool_Val(y)) -> Bool_Val ((x != y))
+                               |(_, _) -> raise (TypeError "Expected Same Types")
+                              )
+
+
+let rec eval_stmt env s = 
+  match s with 
+  (* Evaluate No Operation *)
+  |NoOp -> env
+  (* Evaluate Sequence*)
+  |Seq (stmt1, stmt2) -> let new_env = (eval_stmt env stmt1) in
+                          (eval_stmt new_env stmt2)
+  (* Evaluate Declare *)
+  |Declare (typ, str) -> if (List.assoc_opt str env) = None then 
+                          (match typ with
+                            |Int_Type -> ((str, Int_Val (0)) :: env)
+                            |Bool_Type -> ((str, Bool_Val (false)) :: env)
+                          )
+                         else raise (DeclareError "Already Declared")
+  (* Evaluate Assign *)
+  |Assign (str, expr1) -> let v1 = (eval_expr env expr1) in
+                          (match (List.assoc_opt str env) with
+                            |Some (Int_Val(x)) -> (match v1 with
+                                                      |Int_Val (b) -> ((str, v1) :: env)
+                                                      |_ -> raise (TypeError ("Not of same type"))
+                                                      )
+                            |Some (Bool_Val(y)) -> (match v1 with
+                                                       |Bool_Val (z) -> ((str, v1) :: env)
+                                                       |_ -> raise (TypeError "Not of same type")
+                                                      )
+                            |None -> raise (DeclareError "Has not been declared")
+                          )
+  (* Evaluate If *)
+  |If (expr1, stmt1, stmt2) -> let v1 = (eval_expr env expr1) in
+                             (match v1 with
+                              |Bool_Val (x) -> if x then (eval_stmt env stmt1)
+                                               else (eval_stmt env stmt2)
+                              |_ -> raise (TypeError "Expected Boolean")
+                             )
+  (* Evaluate While *)
+  |While (expr1, stmt1) -> let v1 = (eval_expr env expr1) in
+                           (match v1 with
+                            |Bool_Val(x) -> if x then
+                                              let new_env = (eval_stmt env stmt1) in (eval_stmt new_env (While(expr1, stmt1)))
+                                            else env
+                            |_-> raise (TypeError "Expected boolean")
+                           )
+  (* Evaluate For *)
+  |For (str, expr1, expr2, stmt1)-> let v1 = (eval_expr env expr1) in
+                                    let v2 = (eval_expr env expr2) in
+                                    (match (v1, v2) with 
+                                     |(Int_Val (x), Int_Val (y)) -> let env2 = ((str, v1) :: env) in
+                                                                      (match (List.assoc_opt str env2) with
+                                                                        |Some (Int_Val (num)) -> if num >= x && num <= y then
+                                                                                                    let new_env = (eval_stmt env2 stmt1) in
+                                                                                                      (match (List.assoc_opt str new_env) with
+                                                                                                        | Some (Int_Val (new_num)) -> (eval_stmt new_env (For (str, (Int (new_num + 1)), Int (y) , stmt1)))
+                                                                                                        |_ -> raise (DeclareError "Not Present")
+                                                                                                      )
+                                                                                                 else env2
+                                                                        |_ -> raise (DeclareError "Not Present")
+                                                                      )
+                                     |_ -> raise (TypeError "Expected Integers")
+                                    )
+  (* Evaluate Print *)
+  |Print (expr1) -> let v1 = (eval_expr env expr1) in
+                    (match v1 with 
+                      |Int_Val (x) -> let _ = (print_output_int x) in let _ = (print_output_newline ()) in env
+                      |Bool_Val (x) -> let _ = (print_output_bool x) in let _ = (print_output_newline ()) in env
+                    ) 
